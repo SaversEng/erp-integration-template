@@ -1,0 +1,13 @@
+{
+    "inputMessageMetadata": {},
+    "outputMessageMetadata": {
+        "sessionVariables": {
+            "accountMap": {
+                "connectorName": "#_custom_mule_metadata_type_#",
+                "typeId": "KeyValueList"
+            }
+        }
+    },
+    "id": "85440a13-d92d-4e5a-aace-3cad1ab047a3",
+    "version": "5.2.0.0"
+}

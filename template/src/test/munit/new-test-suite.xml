@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:core="http://www.mulesoft.org/schema/mule/core" xmlns:mock="http://www.mulesoft.org/schema/mule/mock" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/mock http://www.mulesoft.org/schema/mule/mock/current/mule-mock.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd">
+    <munit:config name="munit" doc:name="MUnit configuration"/>
+    <spring:beans>
+        <spring:import resource="classpath:global.xml"/>
+        <spring:import resource="classpath:template.xml"/>
+    </spring:beans>
+    <munit:test name="new-test-suite-GetTheCurrentAccountMapTest" description="Test">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Java']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#[]">
+                <mock:invocation-properties>
+                    <mock:invocation-property key="fileContents" value="#['[{&quot;TransformKey&quot;:&quot;ADSC-001-1430-000&quot;,&quot;AXLegalEntity&quot;:&quot;VVSP&quot;,&quot;AXDisplayValue&quot;:&quot;1530000----9001-100000&quot;},{&quot;TransformKey&quot;:&quot;ADSC-001-2110-520&quot;,&quot;AXLegalEntity&quot;:&quot;VVSP&quot;,&quot;AXDisplayValue&quot;:&quot;2110520-----&quot;},{&quot;TransformKey&quot;:&quot;ADSC-001-4010-000&quot;,&quot;AXLegalEntity&quot;:&quot;VVSP&quot;,&quot;AXDisplayValue&quot;:&quot;7010005-20-300-10100-9001-&quot;}]']"/>
+                </mock:invocation-properties>
+            </mock:then-return>
+        </mock:when>
+        <flow-ref name="GetTheCurrentAccountMap" doc:name="Flow-ref to GetTheCurrentAccountMap"/>
+        <munit:assert-true message="accountMap sessionVar was not created" condition="#[sessionVars.accountMap != null]" doc:name="accountMap Null Check"/>
+        <munit:assert-true message="File read incorrectly.  accountMap sessionVar was not populated" condition="#[sessionVars.accountMap.size() &gt; 0]" doc:name="accountMap Size Check"/>
+        <munit:assert-true message="accountsNotMapped sessionVar was not created" condition="#[sessionVars.accountsNotMapped != null]" doc:name="accountsNotMapped Null Check"/>
+    </munit:test>
+    <munit:test name="new-test-suite-TransactionGPToAXMappingTest-AccountFound" description="Test">
+        <set-session-variable variableName="accountMap" value="#[new java.util.LinkedHashMap()]" doc:name="Mapped Accounts"/>
+        <expression-component doc:name="Add to Map"><![CDATA[LinkedHashMap lhm = new LinkedHashMap();
+      
+      lhm.put("TVI-990-2110-800", "TVI~2110800-----");
+
+sessionVars.accountMap = lhm;]]></expression-component>
+        <munit:set payload="#[&quot;TVI-990-2110-800&quot;]" doc:name="Set Message"/>
+        <flow-ref name="TransactionGPToAXMapping" doc:name="TransactionGPToAXMapping"/>
+        <munit:assert-payload-equals message="Failed to look up account from accountMap" expectedValue="#[&quot;TVI~2110800-----&quot;]" doc:name="Assert Populated Payload"/>
+    </munit:test>
+    <munit:test name="new-test-suite-TransactionGPToAXMappingTest-AccountNotFound" description="Test">
+        <set-session-variable variableName="accountsNotMapped" value="#[new java.util.LinkedHashMap()]" doc:name="Unmapped Accounts"/>
+        <set-session-variable variableName="accountMap" value="#[new java.util.LinkedHashMap()]" doc:name="Mapped Accounts"/>
+        <expression-component doc:name="Add to Map"><![CDATA[LinkedHashMap lhm = new LinkedHashMap();
+      
+      lhm.put("TVI-990-2110-800", "TVI~2110800-----");
+
+sessionVars.accountMap = lhm;]]></expression-component>
+        <munit:set payload="#[&quot;TVI-990-2110-801&quot;]" doc:name="Set Message"/>
+        <flow-ref name="TransactionGPToAXMapping" doc:name="TransactionGPToAXMapping"/>
+        <munit:assert-payload-equals message="Did not return an empty payload" expectedValue="#[&quot;&quot;]" doc:name="Assert Empty Payload"/>
+        <munit:assert-true message="Account was not added to accountsNotMapped" condition="#[sessionVars.accountsNotMapped.size() &gt; 0]" doc:name="Assert True Unmapped Accounts &gt; 0"/>
+        <munit:assert-true message="The unmapped account was not added to the hash map" condition="#[sessionVars.accountsNotMapped.containsKey(&quot;TVI-990-2110-801&quot;)]" doc:name="Assert True Unmapped Accounts Contains"/>
+    </munit:test>
+    <munit:test name="new-test-suite-TransactionGPToAXMappingTest-AccountNotFound-Already-In-accountNotMapped-Map" description="Test">
+        <set-session-variable variableName="accountsNotMapped" value="#[new java.util.LinkedHashMap()]" doc:name="Unmapped Accounts"/>
+        <expression-component doc:name="Expression"><![CDATA[LinkedHashMap lhm = new LinkedHashMap();
+      
+      lhm.put("TVI-990-2110-801", "TVI-990-2110-801");
+
+sessionVars.accountsNotMapped = lhm;]]></expression-component>
+        <set-session-variable variableName="accountMap" value="#[new java.util.LinkedHashMap()]" doc:name="Mapped Accounts"/>
+        <expression-component doc:name="Add to Map"><![CDATA[LinkedHashMap lhm = new LinkedHashMap();
+      
+      lhm.put("TVI-990-2110-800", "TVI~2110800-----");
+
+sessionVars.accountMap = lhm;]]></expression-component>
+        <munit:set payload="#[&quot;TVI-990-2110-801&quot;]" doc:name="Set Message"/>
+        <flow-ref name="TransactionGPToAXMapping" doc:name="TransactionGPToAXMapping"/>
+        <munit:assert-payload-equals message="Did not return an empty payload" expectedValue="#[&quot;&quot;]" doc:name="Assert Empty Payload"/>
+        <munit:assert-true message="Account was not added to accountsNotMapped" condition="#[sessionVars.accountsNotMapped.size() == 1]" doc:name="Assert True Unmapped Accounts Size Is Still 1"/>
+        <munit:assert-true message="The unmapped account was not added to the hash map" condition="#[sessionVars.accountsNotMapped.containsKey(&quot;TVI-990-2110-801&quot;)]" doc:name="Assert True Unmapped Accounts Contains"/>
+    </munit:test>
+    <munit:test name="new-test-suite-WriteUnmappedErrorsTest" description="Test">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock File Write">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Write Errors']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#[]"/>
+        </mock:when>
+        <mock:when messageProcessor=".*:.*" doc:name="Mock Email">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Email Unmapped Accounts']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#[]"/>
+        </mock:when>
+        <expression-component doc:name="Expression"><![CDATA[java.util.HashMap retVal = new java.util.HashMap();
+for(int i = 0; i < 10; i++) {
+	String key = "test" + i;
+	String value = "test" + i;
+	retVal.put(key, value);
+}
+message.setPayload(retVal);]]></expression-component>
+        <set-payload value="#[payload.values()]" doc:name="Set Payload"/>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:input-payload mimeType="application/java"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	Type: "UnmappedAccounts",
+	UnmappedValues: payload
+}]]></dw:set-payload>
+        </dw:transform-message>
+        <flow-ref name="WriteUnmappedErrors" doc:name="WriteUnmappedErrors"/>
+        <munit:assert-on-equals message="Unmapped values were not all added" expectedValue="#[10]" actualValue="#[flowVars.ErrorSize]" doc:name="Assert UnmappedValues Size"/>
+        <munit:assert-on-equals message="File name incorrectly set" expectedValue="#[&quot;UnmappedAccounts.txt&quot;]" actualValue="#[flowVars.filename]" doc:name="Assert File Name"/>
+        <munit:assert-on-equals message="JSON incorrectly created" expectedValue="#['{&quot;Type&quot;:&quot;UnmappedAccounts&quot;,&quot;UnmappedValues&quot;:[&quot;test4&quot;,&quot;test5&quot;,&quot;test2&quot;,&quot;test3&quot;,&quot;test8&quot;,&quot;test9&quot;,&quot;test6&quot;,&quot;test7&quot;,&quot;test0&quot;,&quot;test1&quot;]}']" actualValue="#[flowVars.jsonString.replace(&quot;,\n&quot;, &quot;,&quot;).replace(&quot;:{\n&quot;, &quot;:{&quot;)]" doc:name="Assert JSON String"/>
+    </munit:test>
+</mule>

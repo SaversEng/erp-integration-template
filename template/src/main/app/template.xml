@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:email="http://www.mulesoft.org/schema/mule/email"
+	xmlns:smtp="http://www.mulesoft.org/schema/mule/smtp" xmlns:json="http://www.mulesoft.org/schema/mule/json"
+	xmlns:vm="http://www.mulesoft.org/schema/mule/vm"
+	xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata"
+	xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:core="http://www.mulesoft.org/schema/mule/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/smtp http://www.mulesoft.org/schema/mule/smtp/current/mule-smtp.xsd">
+    <sub-flow name="GetTheCurrentAccountMap">
+        <component  doc:name="Java" class="com.savers.utility.ReadFile"/>
+        <set-payload value="#[flowVars.fileContents]" metadata:id="a303a481-953f-44c4-bbc9-293c83afaaf2" doc:name="Set Payload"/>
+        <json:object-to-json-transformer metadata:id="c08c1093-960c-4b61-82bf-c79f0a9ba4a0" doc:name="Object to JSON"/>
+        <dw:transform-message metadata:id="203b638b-0546-4a47-825b-fee9aa1918c7" doc:name="Get the account map">
+            <dw:input-payload mimeType="application/json"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload map ((payload01 , indexOfPayload01) -> {
+	TransformKey: payload01.TransformKey,
+	TransformValue: payload01.AXLegalEntity ++ "~" ++ payload01.AXDisplayValue
+})]]></dw:set-payload>
+        </dw:transform-message>
+        <expression-component metadata:id="b0e0cd62-04ff-478e-8011-15f120e4bf7f" doc:name="Weave key/value into a Map"><![CDATA[java.util.HashMap retVal = new java.util.HashMap();
+for(int i = 0; i < payload.size(); i++) {
+	String key = payload[i].TransformKey;
+	String value = payload[i].TransformValue;
+	retVal.put(key, value);
+}
+message.setPayload(retVal);
+        	]]></expression-component>
+        <set-session-variable variableName="accountMap" value="#[payload]" metadata:id="7e35ce58-9cf8-477f-96bf-9fd965d901f3" doc:name="Create the account map"/>
+        <set-session-variable variableName="accountsNotMapped" value="#[new java.util.HashMap()]" metadata:id="b2d6bfb3-4b35-4547-abca-29ce2fa5959e" doc:name="Create HashMap of Accounts Not Mapped"/>
+    </sub-flow>
+	<sub-flow name="TransactionGPToAXMapping">
+		<choice doc:name="Choice based on mapping present">
+			<when expression="#[sessionVars.accountMap.containsKey(payload)]">
+				<set-variable variableName="currentValue"
+					value="#[sessionVars.accountMap.get(payload)]"
+					metadata:id="b00df825-ff0a-4bb9-a65a-1b3ad9df6f8a" doc:name="Get the mapped value" />
+				<logger
+					message="Found key: #[payload] as AX Mapped value: #[flowVars.currentValue]"
+					level="DEBUG" doc:name="Log the mapped AX Value" />
+			</when>
+			<otherwise>
+				<logger message="NOT FOUND: #[payload]" level="DEBUG"
+					doc:name="Was not found" />
+				<set-variable variableName="currentValue" value="#[&quot;&quot;]"
+					doc:name="Reset the mapped value" />
+                <choice doc:name="Choice">
+                    <when expression="#[sessionVars.accountsNotMapped.containsKey(payload)]">
+                        <logger message="Value #[payload] already in the Map" level="DEBUG" doc:name="Logger"/>
+                    </when>
+                    <otherwise>
+                        <expression-component doc:name="Add the account as not mapped"><![CDATA[sessionVars.accountsNotMapped.put(payload, payload);
+]]></expression-component>
+                    </otherwise>
+                </choice>
+
+			</otherwise>
+		</choice>
+		<set-payload value="#[flowVars.currentValue]" doc:name="Set Payload" />
+	</sub-flow>
+	<choice-exception-strategy name="templateChoice_Exception_Strategy">
+		<catch-exception-strategy when="#[${pagerDuty.active}]"
+			doc:name="Catch Exception Strategy with Pager Duty">
+            <set-payload value="#[exception.getDetailedMessage()]" doc:name="Set Payload to stackTrace"/>
+            <dw:transform-message doc:name="Transform Message" metadata:id="ea5cc081-2a1f-45e8-a71b-ce326ad1e599">
+                <dw:input-variable variableName="exceptionPayload"/>
+                <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{    
+  "service_key": "${pagerDuty.serviceKey}",
+  "event_type": "trigger",
+  "incident_key": "${workflowName}",
+  "description": flowVars.exceptionPayload.message,
+    "details": {
+    "Failure Context": "${env}",
+    "Stack Trace": payload
+  }
+}]]></dw:set-payload>
+            </dw:transform-message>
+            <object-to-string-transformer doc:name="Object to String"/>
+
+			<http:request config-ref="HttpRequest_PagerDuty" path="${pagerDuty.basePath}"
+				method="POST" doc:name="Post to Page Duty" >
+                <http:request-builder>
+                    <http:header headerName="Content-Type" value="application/json"/>
+
+                </http:request-builder>
+            </http:request>
+			<dw:transform-message metadata:id="0c07879b-66b0-4a52-879b-2635c3c92ed5"
+				doc:name="Transform Message">
+				<dw:input-payload />
+				<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	Status: payload.status,
+	Message: payload.message,
+	IncidentKey: payload.incident_key	
+}
+]]></dw:set-payload>
+			</dw:transform-message>
+			<choice doc:name="Choice">
+				<when expression="#[payload.Status == &quot;success&quot;]">
+					<logger message="Exception logged for #[payload.IncidentKey]"
+						level="DEBUG" doc:name="Logger" />
+				</when>
+				<otherwise>
+					<logger
+						message="Failed to log exception Status: #[payload.Status] Message: #[payload.Message] Incident: #[payload.IncidentKey]"
+						level="ERROR" doc:name="Logger" />
+				</otherwise>
+			</choice>
+            <flow-ref name="EmailFailure" doc:name="EmailFailure"/>
+		</catch-exception-strategy>
+		<catch-exception-strategy doc:name="Catch Exception Strategy no Pager Duty"
+			when="#[${pagerDuty.active} == false]">
+			<logger
+				message="Exception: #[exception.getMessage()]"
+				level="ERROR" doc:name="Logger" />
+            <flow-ref name="EmailFailure" doc:name="EmailFailure"/>
+		</catch-exception-strategy>
+	</choice-exception-strategy>
+    <sub-flow name="EmailFailure">
+        <set-payload value="#[&quot;${email.body}&quot;]" doc:name="Set Payload"/>
+        <smtp:outbound-endpoint host="${email.host}" responseTimeout="10000" doc:name="SMTP" connector-ref="SMTP" from="${email.fromAddress}" to="${email.toAddress}" password="${email.password}" port="${email.port}" replyTo="${email.replyToAddress}" subject="${email.subject}" user="${email.user}">
+        	<email:string-to-email-transformer/>
+        </smtp:outbound-endpoint>
+    </sub-flow>
+    <sub-flow name="WriteUnmappedErrors" doc:description="-- Writes and Emails Unmapped Values --  Defaults to writing and emailing accountsNotMapped.  OPTIONAL - Accepts an inbound payload of type 'string' that is used to look up the sessionVar containing a hash map of errors to write - Looks for a sessionVar called &quot;unmappedIdentifier&quot;.  This sessionVar will be used to decipher the exact file/batch that had unmapped errors.  ie the value of &quot;ECOVA-&lt;DateRange&gt;-UnmappedErrors&quot; could be assigned to this sessionVar and then used as an indicator of what failed.  If this sessionVar is null or empty, then the identifier will either be the value of the aforementioned payload (if it existed), or will default to AccountsNotMapped.">
+        <set-variable variableName="ErrorSize" value="#[payload.UnmappedValues.size()]" doc:name="ErrorSize"/>
+        <set-variable variableName="fileName" value="#[payload.Type + &quot;.txt&quot;]" doc:name="File Name"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+
+        <set-variable variableName="jsonString" value="#[payload.replace(&quot;,&quot;, &quot;,\n&quot;).replace(&quot;:{&quot;, &quot;:{\n&quot;)]" doc:name="Save JSON String"/>
+        <set-payload value="#[flowVars.jsonString]" doc:name="Set Payload"/>
+
+        <file:outbound-endpoint path="${workflow.errorPath}" outputPattern="#[flowVars.fileName]" responseTimeout="10000" doc:name="Write Errors"/>
+        <set-payload value="#[&quot;There were a total of &quot; + flowVars.ErrorSize + &quot;  unmapped error(s) in the proccessed file.  The unmapped error(s) are listed below.\n\n&quot; + flowVars.jsonString]" doc:name="Define Email Body"/>
+        <smtp:outbound-endpoint host="${email.host}" port="${email.port}" user="${email.user}" password="${email.password}" connector-ref="SMTP" to="${email.toAddress}" from="${email.fromAddress}" subject="${email.subject}" replyTo="${email.replyToAddress}" responseTimeout="10000" doc:name="Email Unmapped Accounts">
+        	<email:string-to-email-transformer/>
+        </smtp:outbound-endpoint>
+    </sub-flow>
+</mule>

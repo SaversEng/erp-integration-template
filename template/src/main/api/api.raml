@@ -1,0 +1,72 @@
+#%RAML 0.8
+title: AccountMapping
+baseUri: http://dev-accountmappingapi.azurewebsites.net/api
+#aseUri: https://mocksvc.mulesoft.com/mocks/47ebdc3b-5ef3-49fd-8b9c-5525f3a3f821
+version: 1.0
+protocols:  [HTTP, HTTPS]
+
+/accountmapping:
+  /sales:
+    /mapgpaccount:
+      displayName: Get Mapping from GP Accounts
+      description:  Given GP account mappings XXX-XXXX-XXX provide AX account mappings
+      get:
+        description: GET
+        headers:
+          SaversAPIAccessKey:
+            example: 6979b1be-812c-474f-afb3-010e75e69280
+            required:  true
+          Authorization:
+            required:  true
+        queryParameters:
+          GPDept:
+            minLength:  3
+            maxLength:  3
+            example:  057
+          GPAccount:
+            minLength:  4
+            maxLength:  4
+            example:  OKSH
+          GPSubAcct:
+            minLength:  3
+            maxLength:  3
+            example:  DEF
+          GPDB:
+            minLength:  1
+            maxLength:  256
+            example:  ADSU
+        responses:
+          200:
+            body:
+              application/json:
+                example:  |
+                  [{"ID": 1112,"GPDB": "ADSU    ","GPDepartment": "057",
+                    "GPAccount": "OKSH","GPSubAccount": "DEF","AXLegalEntity": "TVI",
+                    "AXMainAccount": "OKSHDEF","AXBusinessUnit": "20","AXDepartment": null,
+                    "AXCostCenter": "10100","AXLocation": "4057","AXProject": null,
+                    "AXAccountCategory": "UNITACCOUNT","FullGPAccountCode": "057-OKSH-DEF",
+                    "AXDisplayValue": "OKSHDEF-20--10100-4057-"
+                  }]
+    /{ID}:
+      displayName:  Get Mapping record by ID
+      description:  Given an ID return the complete mapping record from GP to AX
+      get:
+        description:  GET
+        headers:
+          SaversAPIAccessKey:
+            example: 6979b1be-812c-474f-afb3-010e75e69280
+            required:  true
+          Authorization:
+            required:  true
+        responses:
+          200:
+            body:
+              application/json:
+                example:  |
+                  [{"ID": 1112,"GPDB": "ADSU    ","GPDepartment": "057",
+                    "GPAccount": "OKSH","GPSubAccount": "DEF","AXLegalEntity": "TVI",
+                    "AXMainAccount": "OKSHDEF","AXBusinessUnit": "20","AXDepartment": null,
+                    "AXCostCenter": "10100","AXLocation": "4057","AXProject": null,
+                    "AXAccountCategory": "UNITACCOUNT","FullGPAccountCode": "057-OKSH-DEF",
+                    "AXDisplayValue": "OKSHDEF-20--10100-4057-"
+                  }]
