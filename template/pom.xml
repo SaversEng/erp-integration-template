@@ -4,7 +4,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.savers.workflows</groupId>
 	<artifactId>template</artifactId>
-	<version>1.1.0.0</version>
+	<version>2.0.0.0</version>
 	<packaging>mule</packaging>
 	<name>Mule Template Application</name>
 	
